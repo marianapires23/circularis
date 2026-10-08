@@ -128,15 +128,19 @@
       const urlParams = new URLSearchParams(window.location.search);
       const empresaId = parseInt(urlParams.get('id')) || 0;
 
-      // Guarda os pontos no localStorage para a página metricas.html ler
+      // 1. Obtém a pontuação acumulada atual da empresa
       let pontosSalvos = JSON.parse(localStorage.getItem('pontosEmpresas')) || {};
-      const pontosAtuais = pontosSalvos[empresaId] || 0;
+      const pontosAtuais = parseInt(pontosSalvos[empresaId]) || 0;
+
+      // 2. Soma 10 pontos aos pontos que já existiam
       pontosSalvos[empresaId] = pontosAtuais + 10;
+
+      // 3. Salva a nova soma no localStorage
       localStorage.setItem('pontosEmpresas', JSON.stringify(pontosSalvos));
 
-      // Animação e feedback
+      // 4. Animação e feedback
       const btn = document.getElementById('btn-confirmar-pontos');
-      btn.innerText = "🎉 Entrega Confirmada (+10 Pts Adicionados)";
+      btn.innerText = `🎉 Entrega Confirmada (Total: +${pontosSalvos[empresaId]} Pts)`;
       btn.disabled = true;
 
       confetti({ particleCount: 120, spread: 80, origin: { y: 0.6 } });
