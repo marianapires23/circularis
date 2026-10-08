@@ -4,151 +4,41 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Circularis • Validação de Carga</title>
-  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.5.1/dist/confetti.browser.min.js"></script>
-
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
-    body {
-      background-color: #b6d8bd;
-      background-image: linear-gradient(rgba(13, 35, 26, 0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(13, 35, 26, 0.05) 1px, transparent 1px);
-      background-size: 20px 20px;
-      color: #0d231a;
-      min-height: 100vh;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      padding: 20px;
-    }
-
-    .card-validador {
-      background: #ffffff;
-      border-radius: 16px;
-      padding: 25px;
-      width: 100%;
-      max-width: 420px;
-      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
-      border: 1px solid #cbe5d2;
-      text-align: center;
-    }
-
-    .brand {
-      font-size: 1.2rem;
-      font-weight: bold;
-      color: #0d231a;
-      margin-bottom: 15px;
-    }
-
-    .product-details-card {
-      background: #f4f8f5;
-      border: 1px solid #cbe5d2;
-      border-radius: 10px;
-      padding: 18px;
-      text-align: left;
-      font-size: 0.9rem;
-      margin-bottom: 20px;
-      line-height: 1.6;
-    }
-
-    .btn-actions {
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-    }
-
-    .btn-success {
-      width: 100%;
-      background: #2e7d32;
-      color: #ffffff;
-      border: none;
-      padding: 14px;
-      border-radius: 8px;
-      font-weight: bold;
-      font-size: 0.95rem;
-      cursor: pointer;
-      transition: background 0.2s;
-    }
-
-    .btn-success:hover { background: #1b5e20; }
-    .btn-success:disabled { background: #a0a0a0; cursor: not-allowed; }
-
-    .btn-secondary {
-      width: 100%;
-      background: #e0e0e0;
-      color: #333333;
-      border: none;
-      padding: 12px;
-      border-radius: 8px;
-      font-weight: bold;
-      font-size: 0.9rem;
-      cursor: pointer;
-      transition: background 0.2s;
-      text-decoration: none;
-      display: inline-block;
-    }
-
-    .btn-secondary:hover { background: #d0d0d0; }
+    body { font-family: 'Segoe UI', sans-serif; background: #f4f8f5; text-align: center; padding: 40px 20px; color: #0d231a; }
+    .card { background: white; max-width: 400px; margin: 0 auto; padding: 30px; border-radius: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); }
+    .btn-pontuar { background: #2e7d32; color: white; border: none; padding: 12px 20px; font-weight: bold; border-radius: 8px; cursor: pointer; font-size: 1rem; margin-top: 20px; }
+    .btn-pontuar:hover { background: #1b5e20; }
   </style>
 </head>
 <body>
 
-  <div class="card-validador">
-    <div class="brand">🌐 Circularis • Validação de Carga</div>
-
-    <div class="product-details-card" id="qr-product-info">
-      Carregando informações da carga...
-    </div>
-
-    <div class="btn-actions">
-      <button class="btn-success" id="btn-confirmar-pontos" onclick="confirmarEntrega()">
-        ✅ Confirmar Entrega e Parceria (+100 Pts)
-      </button>
-
-      <button class="btn-secondary" onclick="voltarAoDashboard()">
-        Voltar ao Dashboard
-      </button>
-    </div>
+  <div class="card">
+    <h2>🚚 Validação de Carga</h2>
+    <p style="margin-top: 10px; color: #555;">Confirme a entrega do lote para atribuir os pontos no Ranking Circularis.</p>
+    
+    <button class="btn-pontuar" onclick="validarEntregaEPontuar()">
+      ⭐ Confirmar Entrega e Atribuir +10 Pts Extras
+    </button>
   </div>
 
   <script>
-    const empresas = [
-      { id: 0, nome: "MERCEDES-BENZ DO BRASIL LTDA.", produto: "Resíduos Metálicos Automotivos", quantidade: "2.500 kg", orcamento: 4375.00 },
-      { id: 1, nome: "NATURA", produto: "Aparas de Plástico Reciclado PET/PP", quantidade: "2.500 kg", orcamento: 4625.00 },
-      { id: 2, nome: "SCANIA LATIN AMERICA LTDA", produto: "Sucata Industrial de Alumínio", quantidade: "2.500 kg", orcamento: 4750.00 },
-      { id: 3, nome: "BOTICARIO PRODUTOS DE BELEZA LTDA", produto: "Embalagens e Caixas de Papelão", quantidade: "2.500 kg", orcamento: 5000.00 },
-      { id: 4, nome: "MERCADOLIVRE.COM ATIVIDADES DE INTERNET LTDA", produto: "Lotes de Papelão Corrugado", quantidade: "2.500 kg", orcamento: 5500.00 }
-    ];
-
-    window.onload = function() {
+    function validarEntregaEPontuar() {
+      // 1. Identifica qual empresa foi lida na URL (?id=0, ?id=1, etc.)
       const urlParams = new URLSearchParams(window.location.search);
-      const idParam = parseInt(urlParams.get('id'));
-      const dateParam = urlParams.get('date');
+      const empresaId = parseInt(urlParams.get('id')) || 0;
 
-      const emp = empresas.find(e => e.id === idParam) || empresas[0];
-      const dataFormatada = dateParam ? dateParam.split('-').reverse().join('/') : new Date().toLocaleDateString('pt-BR');
+      // 2. Busca o histórico de pontos salvo ou cria um novo
+      let pontosSalvos = JSON.parse(localStorage.getItem('pontosEmpresas')) || {};
 
-      document.getElementById('qr-product-info').innerHTML = `
-        <p>🏢 <strong>Empresa:</strong> ${emp.nome}</p>
-        <p>📦 <strong>Produto / Carga:</strong> ${emp.produto}</p>
-        <p>⚖️ <strong>Quantidade:</strong> ${emp.quantidade}</p>
-        <p>💰 <strong>Orçamento Estimado:</strong> R$ ${emp.orcamento.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</p>
-        <p>📅 <strong>Data Agendada:</strong> ${dataFormatada}</p>
-      `;
-    };
+      // 3. Adiciona +10 pontos extras para esta empresa
+      const pontosAtuais = pontosSalvos[empresaId] || 0;
+      pontosSalvos[empresaId] = pontosAtuais + 10;
 
-    function confirmarEntrega() {
-      const btn = document.getElementById('btn-confirmar-pontos');
-      btn.innerText = "🎉 Entrega Confirmada (+100 Pts Adicionados)";
-      btn.disabled = true;
+      // 4. Salva a atualização na memória do navegador (localStorage)
+      localStorage.setItem('pontosEmpresas', JSON.stringify(pontosSalvos));
 
-      confetti({
-        particleCount: 120,
-        spread: 80,
-        origin: { y: 0.6 }
-      });
-    }
-
-    function voltarAoDashboard() {
-      window.location.href = "metricas.html";
+      alert("✅ Carga Validada com Sucesso! +10 pontos adicionados ao Ranking.");
     }
   </script>
 </body>
