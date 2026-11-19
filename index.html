@@ -118,7 +118,7 @@
     </div>
   </div>
 
- <script>
+<script>
   function formatarBRL(valor) {
     const num = Number(valor);
     if (isNaN(num)) return "R$ 0,00";
@@ -138,6 +138,9 @@
     tipo: 'industria',
     userId: ''
   };
+
+  let entregaConfirmada = false;
+  let pontosGanhosSessao = 0;
 
   async function carregarDadosDaTabela() {
     const urlParams = new URLSearchParams(window.location.search);
@@ -177,40 +180,39 @@
 
     try {
       if (tipo === 'cooperativa') {
-        const listaCoops = [];
         const resEmp = await fetch('/api/feed/empresas');
-        if (resEmp.ok) listaCoops.push(...(await resEmp.json()));
-        try {
-          const resCoop = await fetch('/api/feed/cooperativas');
-          if (resCoop.ok) listaCoops.push(...(await resCoop.json()));
-        } catch (_) {}
+        if (resEmp.ok) {
+          const listaCoops = await resEmp.json();
+          const coopBanco = Array.isArray(listaCoops)
+            ? listaCoops.find(c => String(c.id_usu || c.id_usuario || c.id) === String(idParam))
+            : null;
 
-        const coopBanco = listaCoops.find(c => String(c.id_usu || c.id_usuario || c.id) === String(idParam));
-        if (coopBanco) {
-          const taxaFixa = parseFloat(coopBanco.taxa_fixa || 0);
-          const taxaServico = parseFloat(coopBanco.taxa_servico || 0);
-          const tipoCob = String(coopBanco.tipo_taxa_servico || '').toLowerCase();
-          const dist = parseFloat(dadosItem.distanciaKm || 10);
+          if (coopBanco) {
+            const taxaFixa = parseFloat(coopBanco.taxa_fixa || 0);
+            const taxaServico = parseFloat(coopBanco.taxa_servico || 0);
+            const tipoCob = String(coopBanco.tipo_taxa_servico || '').toLowerCase();
+            const dist = parseFloat(dadosItem.distanciaKm || 10);
 
-          let custoVar = taxaServico;
-          let tipoTexto = coopBanco.tipo_taxa_servico || 'Taxa por Serviço';
-          if (tipoCob.includes('produto') || tipoCob.includes('volume')) {
-            custoVar = taxaServico * 50;
-            tipoTexto = `Por Produto/Volume (${formatarBRL(taxaServico)} × 50 un. modelo)`;
-          } else if (tipoCob.includes('distancia') || tipoCob.includes('km')) {
-            custoVar = taxaServico * dist;
-            tipoTexto = `Por Distância (${formatarBRL(taxaServico)}/km)`;
-          } else if (tipoCob.includes('peso') || tipoCob.includes('kg')) {
-            custoVar = taxaServico * 500;
-            tipoTexto = `Por Peso (${formatarBRL(taxaServico)}/kg)`;
+            let custoVar = taxaServico;
+            let tipoTexto = coopBanco.tipo_taxa_servico || 'Taxa por Serviço';
+            if (tipoCob.includes('produto') || tipoCob.includes('volume')) {
+              custoVar = taxaServico * 50;
+              tipoTexto = `Por Produto/Volume (${formatarBRL(taxaServico)} × 50 un. modelo)`;
+            } else if (tipoCob.includes('distancia') || tipoCob.includes('km')) {
+              custoVar = taxaServico * dist;
+              tipoTexto = `Por Distância (${formatarBRL(taxaServico)}/km)`;
+            } else if (tipoCob.includes('peso') || tipoCob.includes('kg')) {
+              custoVar = taxaServico * 500;
+              tipoTexto = `Por Peso (${formatarBRL(taxaServico)}/kg)`;
+            }
+
+            dadosItem.empId = String(coopBanco.id_usu || coopBanco.id_usuario || coopBanco.id || idParam);
+            dadosItem.nome = coopBanco.nome_cooperativa || coopBanco.nome_emp || dadosItem.nome;
+            dadosItem.localizacao = coopBanco.localizacao || dadosItem.localizacao;
+            dadosItem.taxaFixa = taxaFixa;
+            dadosItem.tipoCobranca = tipoTexto;
+            dadosItem.custoTotal = taxaFixa + custoVar;
           }
-
-          dadosItem.empId = String(coopBanco.id_usu || coopBanco.id_usuario || coopBanco.id || idParam);
-          dadosItem.nome = coopBanco.nome_cooperativa || coopBanco.nome_emp || dadosItem.nome;
-          dadosItem.localizacao = coopBanco.localizacao || dadosItem.localizacao;
-          dadosItem.taxaFixa = taxaFixa;
-          dadosItem.tipoCobranca = tipoTexto;
-          dadosItem.custoTotal = taxaFixa + custoVar;
         }
       } else if (userId) {
         const resCarrinho = await fetch(`/api/carrinho?id_usu=${encodeURIComponent(userId)}`);
@@ -302,18 +304,19 @@
     const { id, empId, nome, tipo, userId } = operacaoAtual;
     const btn = document.getElementById('btn-confirmar-pontos');
 
-    // 1. Soma +10 pontos para o item na tabela de métricas
+    entregaConfirmada = true;
+    pontosGanhosSessao += 10;
+
+    // 1. Salva no localStorage do domínio atual
     const chavePontos = userId ? `pontosEmpresas_${userId}` : 'pontosEmpresas_anonimo';
     let pontosSalvos = JSON.parse(localStorage.getItem(chavePontos) || '{}');
-    const pontosAtuais = Number(pontosSalvos[id]) || 0;
-    pontosSalvos[id] = pontosAtuais + 10;
+    pontosSalvos[id] = (Number(pontosSalvos[id]) || 0) + 10;
     localStorage.setItem(chavePontos, JSON.stringify(pontosSalvos));
 
     let pontosLegado = JSON.parse(localStorage.getItem('pontosEmpresas') || '{}');
     pontosLegado[id] = pontosSalvos[id];
     localStorage.setItem('pontosEmpresas', JSON.stringify(pontosLegado));
 
-    // 2. Registra a parceria confirmada para aparecer no Feed das Empresas
     registrarParceriaLocal(userId, {
       id: id,
       empId: empId,
@@ -322,23 +325,31 @@
       dataConfirmacao: new Date().toISOString()
     });
 
-    // 3. Notifica imediatamente as abas abertas (metricas.html e feed.html)
+    // 2. Envia mensagem cross-origin caso tenha sido aberto a partir de localhost:3000
+    const payloadSync = {
+      evento: 'ENTREGA_CONFIRMADA',
+      id,
+      empId,
+      nome,
+      tipo,
+      userId,
+      pontosAdd: 10
+    };
+
+    try {
+      if (window.opener && !window.opener.closed) {
+        window.opener.postMessage(payloadSync, '*');
+      }
+    } catch (_) {}
+
     try {
       const canal = new BroadcastChannel('circularis_sync');
-      canal.postMessage({
-        evento: 'ENTREGA_CONFIRMADA',
-        id,
-        empId,
-        nome,
-        tipo,
-        userId,
-        novosPontos: pontosSalvos[id]
-      });
+      canal.postMessage(payloadSync);
     } catch (_) {}
 
     btn.innerText = tipo === 'cooperativa'
-      ? "🎉 Coleta Confirmada • Parceria Ativa no Feed!"
-      : `🎉 Entrega Confirmada (+10 Pts no Score • Parceria Ativa!)`;
+      ? "🎉 Coleta Confirmada! Clique em Voltar ao Dashboard"
+      : `🎉 Confirmado (+${pontosGanhosSessao} Pts)! Clique em Voltar ao Dashboard`;
     btn.disabled = true;
 
     confetti({ particleCount: 120, spread: 80, origin: { y: 0.6 } });
@@ -346,18 +357,25 @@
 
   function voltarAoDashboard() {
     const { id, empId, nome, tipo, userId } = operacaoAtual;
-    const params = new URLSearchParams({
-      confirmado_id: id,
-      empId: empId,
-      nome: nome,
-      type: tipo,
-      user: userId
-    });
+    const params = new URLSearchParams();
+
+    // Só envia pontuação e parceria se o botão de confirmar foi realmente clicado
+    if (entregaConfirmada) {
+      params.set('confirmado_id', id);
+      params.set('pontos_add', String(pontosGanhosSessao || 10));
+      params.set('empId', empId);
+      params.set('nome', nome);
+      params.set('type', tipo);
+      params.set('user', userId);
+      params.set('ts', String(Date.now()));
+    }
+
+    const query = params.toString() ? `?${params.toString()}` : '';
 
     if (window.location.hostname.includes('github.io')) {
-      window.location.href = `http://localhost:3000/metricas.html?${params.toString()}`;
+      window.location.href = `http://localhost:3000/metricas.html${query}`;
     } else {
-      window.location.href = `metricas.html?${params.toString()}`;
+      window.location.href = `metricas.html${query}`;
     }
   }
 
