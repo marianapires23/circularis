@@ -118,210 +118,250 @@
     </div>
   </div>
 
-  <script>
-    function formatarBRL(valor) {
-      const num = Number(valor);
-      if (isNaN(num)) return "R$ 0,00";
-      return num.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+ <script>
+  function formatarBRL(valor) {
+    const num = Number(valor);
+    if (isNaN(num)) return "R$ 0,00";
+    return num.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  }
+
+  function formatarDataBR(dateParam) {
+    if (!dateParam) return new Date().toLocaleDateString('pt-BR');
+    const partes = dateParam.split('-');
+    return partes.length === 3 ? `${partes[2]}/${partes[1]}/${partes[0]}` : dateParam;
+  }
+
+  let operacaoAtual = {
+    id: '',
+    empId: '',
+    nome: '',
+    tipo: 'industria',
+    userId: ''
+  };
+
+  async function carregarDadosDaTabela() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const idParam = urlParams.get('id') || '';
+    const empIdParam = urlParams.get('empId') || '';
+    const tipo = (urlParams.get('type') || 'industria').toLowerCase();
+    const userId = urlParams.get('user') || localStorage.getItem('id_usu') || '';
+    const dataFormatada = formatarDataBR(urlParams.get('date'));
+
+    const container = document.getElementById('qr-product-info');
+    const badge = document.getElementById('badge-operacao');
+    const btnConfirmar = document.getElementById('btn-confirmar-pontos');
+
+    if (!idParam) {
+      badge.innerText = "Aviso";
+      container.innerHTML = `<p>⚠️ Nenhum item selecionado. Escaneie um QR Code gerado na tabela de <strong>Indicadores Estratégicos</strong>.</p>`;
+      btnConfirmar.disabled = true;
+      return;
     }
 
-    function formatarDataBR(dateParam) {
-      if (!dateParam) return new Date().toLocaleDateString('pt-BR');
-      const partes = dateParam.split('-');
-      return partes.length === 3 ? `${partes[2]}/${partes[1]}/${partes[0]}` : dateParam;
-    }
+    let dadosItem = {
+      id: idParam,
+      empId: empIdParam,
+      nome: urlParams.get('nome') || '',
+      produto: urlParams.get('produto') || '',
+      categoria: urlParams.get('categoria') || '',
+      quantidade: urlParams.get('qtd') || '',
+      unidade: urlParams.get('unidade') || 'kg',
+      precoUnitario: urlParams.get('precoUnit') || '',
+      orcamentoTotal: urlParams.get('orcamento') || '',
+      distanciaKm: urlParams.get('dist') || '',
+      localizacao: urlParams.get('local') || '',
+      taxaFixa: urlParams.get('taxaFixa') || '',
+      tipoCobranca: urlParams.get('tipoCob') || '',
+      custoTotal: urlParams.get('custoTotal') || ''
+    };
 
-    async function carregarDadosDaTabela() {
-      const urlParams = new URLSearchParams(window.location.search);
-      const idParam = urlParams.get('id');
-      const tipo = (urlParams.get('type') || 'industria').toLowerCase();
-      const userId = urlParams.get('user') || localStorage.getItem('id_usu') || '';
-      const dataFormatada = formatarDataBR(urlParams.get('date'));
+    try {
+      if (tipo === 'cooperativa') {
+        const listaCoops = [];
+        const resEmp = await fetch('/api/feed/empresas');
+        if (resEmp.ok) listaCoops.push(...(await resEmp.json()));
+        try {
+          const resCoop = await fetch('/api/feed/cooperativas');
+          if (resCoop.ok) listaCoops.push(...(await resCoop.json()));
+        } catch (_) {}
 
-      const container = document.getElementById('qr-product-info');
-      const badge = document.getElementById('badge-operacao');
-      const btnConfirmar = document.getElementById('btn-confirmar-pontos');
+        const coopBanco = listaCoops.find(c => String(c.id_usu || c.id_usuario || c.id) === String(idParam));
+        if (coopBanco) {
+          const taxaFixa = parseFloat(coopBanco.taxa_fixa || 0);
+          const taxaServico = parseFloat(coopBanco.taxa_servico || 0);
+          const tipoCob = String(coopBanco.tipo_taxa_servico || '').toLowerCase();
+          const dist = parseFloat(dadosItem.distanciaKm || 10);
 
-      if (!idParam) {
-        badge.innerText = "Aviso";
-        container.innerHTML = `<p>⚠️ Nenhum item selecionado. Escaneie um QR Code gerado na tabela de <strong>Indicadores Estratégicos</strong>.</p>`;
-        btnConfirmar.disabled = true;
-        return;
-      }
-
-      // 1. Dados base vindos diretamente dos parâmetros do QR Code (garante funcionamento mesmo no GitHub Pages/celular)
-      let dadosItem = {
-        id: idParam,
-        nome: urlParams.get('nome') || '',
-        produto: urlParams.get('produto') || '',
-        categoria: urlParams.get('categoria') || '',
-        quantidade: urlParams.get('qtd') || '',
-        unidade: urlParams.get('unidade') || 'kg',
-        precoUnitario: urlParams.get('precoUnit') || '',
-        orcamentoTotal: urlParams.get('orcamento') || '',
-        distanciaKm: urlParams.get('dist') || '',
-        localizacao: urlParams.get('local') || '',
-        taxaFixa: urlParams.get('taxaFixa') || '',
-        tipoCobranca: urlParams.get('tipoCob') || '',
-        custoTotal: urlParams.get('custoTotal') || ''
-      };
-
-      // 2. Se estiver rodando no servidor da aplicação (localhost), busca os dados atualizados direto do banco
-      try {
-        if (tipo === 'cooperativa') {
-          const listaCoops = [];
-          const resEmp = await fetch('/api/feed/empresas');
-          if (resEmp.ok) listaCoops.push(...(await resEmp.json()));
-          try {
-            const resCoop = await fetch('/api/feed/cooperativas');
-            if (resCoop.ok) listaCoops.push(...(await resCoop.json()));
-          } catch (_) {}
-
-          const coopBanco = listaCoops.find(c => String(c.id_usu || c.id_usuario || c.id) === String(idParam));
-          if (coopBanco) {
-            const taxaFixa = parseFloat(coopBanco.taxa_fixa || 0);
-            const taxaServico = parseFloat(coopBanco.taxa_servico || 0);
-            const tipoCob = String(coopBanco.tipo_taxa_servico || '').toLowerCase();
-            const dist = parseFloat(dadosItem.distanciaKm || 10);
-
-            let custoVar = taxaServico;
-            let tipoTexto = coopBanco.tipo_taxa_servico || 'Taxa por Serviço';
-            if (tipoCob.includes('produto') || tipoCob.includes('volume')) {
-              custoVar = taxaServico * 50;
-              tipoTexto = `Por Produto/Volume (${formatarBRL(taxaServico)} × 50 un. modelo)`;
-            } else if (tipoCob.includes('distancia') || tipoCob.includes('km')) {
-              custoVar = taxaServico * dist;
-              tipoTexto = `Por Distância (${formatarBRL(taxaServico)}/km)`;
-            } else if (tipoCob.includes('peso') || tipoCob.includes('kg')) {
-              custoVar = taxaServico * 500;
-              tipoTexto = `Por Peso (${formatarBRL(taxaServico)}/kg)`;
-            }
-
-            dadosItem.nome = coopBanco.nome_cooperativa || coopBanco.nome_emp || dadosItem.nome;
-            dadosItem.localizacao = coopBanco.localizacao || dadosItem.localizacao;
-            dadosItem.taxaFixa = taxaFixa;
-            dadosItem.tipoCobranca = tipoTexto;
-            dadosItem.custoTotal = taxaFixa + custoVar;
+          let custoVar = taxaServico;
+          let tipoTexto = coopBanco.tipo_taxa_servico || 'Taxa por Serviço';
+          if (tipoCob.includes('produto') || tipoCob.includes('volume')) {
+            custoVar = taxaServico * 50;
+            tipoTexto = `Por Produto/Volume (${formatarBRL(taxaServico)} × 50 un. modelo)`;
+          } else if (tipoCob.includes('distancia') || tipoCob.includes('km')) {
+            custoVar = taxaServico * dist;
+            tipoTexto = `Por Distância (${formatarBRL(taxaServico)}/km)`;
+          } else if (tipoCob.includes('peso') || tipoCob.includes('kg')) {
+            custoVar = taxaServico * 500;
+            tipoTexto = `Por Peso (${formatarBRL(taxaServico)}/kg)`;
           }
-        } else if (userId) {
-          const resCarrinho = await fetch(`/api/carrinho?id_usu=${encodeURIComponent(userId)}`);
-          if (resCarrinho.ok) {
-            const itens = await resCarrinho.json();
-            const itemBanco = Array.isArray(itens)
-              ? itens.find(i => String(i.id_solicitacao || i.id) === String(idParam))
-              : null;
 
-            if (itemBanco) {
-              const qtd = parseFloat(itemBanco.quant_solicitacao || itemBanco.peso_solicitacao || itemBanco.quantidade || 1);
-              const total = parseFloat(itemBanco.orcamento || 0);
-              const un = itemBanco.peso_solicitacao || itemBanco.unidade === 'Kg' ? 'kg' : 'unid';
-              const pUnit = itemBanco.precoUnitario || (qtd > 0 ? total / qtd : total);
+          dadosItem.empId = String(coopBanco.id_usu || coopBanco.id_usuario || coopBanco.id || idParam);
+          dadosItem.nome = coopBanco.nome_cooperativa || coopBanco.nome_emp || dadosItem.nome;
+          dadosItem.localizacao = coopBanco.localizacao || dadosItem.localizacao;
+          dadosItem.taxaFixa = taxaFixa;
+          dadosItem.tipoCobranca = tipoTexto;
+          dadosItem.custoTotal = taxaFixa + custoVar;
+        }
+      } else if (userId) {
+        const resCarrinho = await fetch(`/api/carrinho?id_usu=${encodeURIComponent(userId)}`);
+        if (resCarrinho.ok) {
+          const itens = await resCarrinho.json();
+          const itemBanco = Array.isArray(itens)
+            ? itens.find(i => String(i.id_solicitacao || i.id) === String(idParam))
+            : null;
 
-              dadosItem.nome = itemBanco.empresa || dadosItem.nome;
-              dadosItem.produto = itemBanco.titulo || itemBanco.produto || itemBanco.categoria || dadosItem.produto;
-              dadosItem.categoria = itemBanco.categoria || dadosItem.categoria;
-              dadosItem.quantidade = qtd;
-              dadosItem.unidade = un;
-              dadosItem.precoUnitario = pUnit;
-              dadosItem.orcamentoTotal = pUnit * qtd;
-            }
+          if (itemBanco) {
+            const qtd = parseFloat(itemBanco.quant_solicitacao || itemBanco.peso_solicitacao || itemBanco.quantidade || 1);
+            const total = parseFloat(itemBanco.orcamento || 0);
+            const un = itemBanco.peso_solicitacao || itemBanco.unidade === 'Kg' ? 'kg' : 'unid';
+            const pUnit = itemBanco.precoUnitario || (qtd > 0 ? total / qtd : total);
+
+            dadosItem.empId = String(itemBanco.id_empresa || itemBanco.id_fornecedor || itemBanco.id_emp || dadosItem.empId || '');
+            dadosItem.nome = itemBanco.empresa || dadosItem.nome;
+            dadosItem.produto = itemBanco.titulo || itemBanco.produto || itemBanco.categoria || dadosItem.produto;
+            dadosItem.categoria = itemBanco.categoria || dadosItem.categoria;
+            dadosItem.quantidade = qtd;
+            dadosItem.unidade = un;
+            dadosItem.precoUnitario = pUnit;
+            dadosItem.orcamentoTotal = pUnit * qtd;
           }
         }
-      } catch (_) {
-        // Quando aberto externamente (ex: celular via GitHub Pages), utiliza os dados da URL
       }
+    } catch (_) {}
 
-      // 3. Fallback no localStorage se ainda faltar algum dado
-      if (tipo !== 'cooperativa' && !dadosItem.produto && userId) {
-        const locais = JSON.parse(localStorage.getItem(`solicitacoesEnviadas_${userId}`) || '[]');
-        const encontrado = locais.find(i => String(i.id_solicitacao || i.id) === String(idParam));
-        if (encontrado) {
-          dadosItem.nome = encontrado.empresa || dadosItem.nome;
-          dadosItem.produto = encontrado.titulo || encontrado.produto || dadosItem.produto;
-          dadosItem.categoria = encontrado.categoria || dadosItem.categoria;
-          dadosItem.quantidade = encontrado.quant_solicitacao || encontrado.quantidade || 1;
-          dadosItem.unidade = encontrado.unidade || 'kg';
-          dadosItem.orcamentoTotal = encontrado.orcamento || 0;
-          dadosItem.precoUnitario = Number(dadosItem.orcamentoTotal) / (Number(dadosItem.quantidade) || 1);
-        }
-      }
+    operacaoAtual = {
+      id: String(idParam),
+      empId: String(dadosItem.empId || (tipo === 'cooperativa' ? idParam : '')),
+      nome: dadosItem.nome || 'Parceiro Circularis',
+      tipo: tipo,
+      userId: String(userId)
+    };
 
-      // 4. Renderiza na tela exatamente os campos da tabela correspondente
-      if (tipo === 'cooperativa') {
-        badge.innerText = "♻️ Coleta • Cooperativa";
-        btnConfirmar.innerText = "✅ Confirmar Coleta e Validar Operação";
+    if (tipo === 'cooperativa') {
+      badge.innerText = "♻️ Coleta • Cooperativa";
+      btnConfirmar.innerText = "✅ Confirmar Coleta e Ativar Parceria";
 
-        container.innerHTML = `
-          <p>♻️ <strong>Cooperativa:</strong> ${dadosItem.nome || 'Cooperativa Parceira'}</p>
-          <p>📍 <strong>Localização:</strong> ${dadosItem.localizacao || 'Não informada'}</p>
-          <p>🏷️ <strong>Taxa Fixa:</strong> ${formatarBRL(dadosItem.taxaFixa)}</p>
-          <p>🧾 <strong>Tipo de Cobrança:</strong> ${dadosItem.tipoCobranca || 'Taxa por Serviço'}</p>
-          ${dadosItem.distanciaKm ? `<p>🚚 <strong>Distância Estimada:</strong> ${dadosItem.distanciaKm} km</p>` : ''}
-          <p>💰 <strong>Custo Total Estimado:</strong> <strong style="color:#15803d;">${formatarBRL(dadosItem.custoTotal)}</strong></p>
-          <p>📅 <strong>Data Agendada:</strong> ${dataFormatada}</p>
-        `;
-      } else {
-        badge.innerText = "🏭 Entrega • Resíduo Industrial";
-        const qtdFormatada = dadosItem.quantidade
-          ? `${Number(dadosItem.quantidade).toLocaleString('pt-BR')} ${dadosItem.unidade}`
-          : 'Não informada';
+      container.innerHTML = `
+        <p>♻️ <strong>Cooperativa:</strong> ${dadosItem.nome || 'Cooperativa Parceira'}</p>
+        <p>📍 <strong>Localização:</strong> ${dadosItem.localizacao || 'Não informada'}</p>
+        <p>🏷️ <strong>Taxa Fixa:</strong> ${formatarBRL(dadosItem.taxaFixa)}</p>
+        <p>🧾 <strong>Tipo de Cobrança:</strong> ${dadosItem.tipoCobranca || 'Taxa por Serviço'}</p>
+        ${dadosItem.distanciaKm ? `<p>🚚 <strong>Distância Estimada:</strong> ${dadosItem.distanciaKm} km</p>` : ''}
+        <p>💰 <strong>Custo Total Estimado:</strong> <strong style="color:#15803d;">${formatarBRL(dadosItem.custoTotal)}</strong></p>
+        <p>📅 <strong>Data Agendada:</strong> ${dataFormatada}</p>
+      `;
+    } else {
+      badge.innerText = "🏭 Entrega • Resíduo Industrial";
+      const qtdFormatada = dadosItem.quantidade
+        ? `${Number(dadosItem.quantidade).toLocaleString('pt-BR')} ${dadosItem.unidade}`
+        : 'Não informada';
 
-        container.innerHTML = `
-          <p>🏢 <strong>Fornecedor:</strong> ${dadosItem.nome || 'Empresa Parceira'}</p>
-          <p>📦 <strong>Produto / Resíduo:</strong> ${dadosItem.produto || 'Resíduo Industrial'}</p>
-          ${dadosItem.categoria ? `<p>🗂️ <strong>Categoria:</strong> ${dadosItem.categoria}</p>` : ''}
-          <p>⚖️ <strong>Quantidade (Escala Base):</strong> ${qtdFormatada}</p>
-          <p>🏷️ <strong>Preço / ${dadosItem.unidade}:</strong> ${formatarBRL(dadosItem.precoUnitario)}</p>
-          <p>💰 <strong>Orçamento Total:</strong> <strong style="color:#15803d;">${formatarBRL(dadosItem.orcamentoTotal)}</strong></p>
-          ${dadosItem.distanciaKm ? `<p>🚚 <strong>Distância:</strong> ${dadosItem.distanciaKm} km</p>` : ''}
-          <p>📅 <strong>Data Agendada:</strong> ${dataFormatada}</p>
-        `;
-      }
+      container.innerHTML = `
+        <p>🏢 <strong>Fornecedor:</strong> ${dadosItem.nome || 'Empresa Parceira'}</p>
+        <p>📦 <strong>Produto / Resíduo:</strong> ${dadosItem.produto || 'Resíduo Industrial'}</p>
+        ${dadosItem.categoria ? `<p>🗂️ <strong>Categoria:</strong> ${dadosItem.categoria}</p>` : ''}
+        <p>⚖️ <strong>Quantidade (Escala Base):</strong> ${qtdFormatada}</p>
+        <p>🏷️ <strong>Preço / ${dadosItem.unidade}:</strong> ${formatarBRL(dadosItem.precoUnitario)}</p>
+        <p>💰 <strong>Orçamento Total:</strong> <strong style="color:#15803d;">${formatarBRL(dadosItem.orcamentoTotal)}</strong></p>
+        ${dadosItem.distanciaKm ? `<p>🚚 <strong>Distância:</strong> ${dadosItem.distanciaKm} km</p>` : ''}
+        <p>📅 <strong>Data Agendada:</strong> ${dataFormatada}</p>
+      `;
     }
+  }
 
-    function validarEntregaEPontuar() {
-      const urlParams = new URLSearchParams(window.location.search);
-      const empresaId = String(urlParams.get('id') || '0');
-      const userId = urlParams.get('user') || localStorage.getItem('id_usu') || '';
-      const tipo = (urlParams.get('type') || 'industria').toLowerCase();
+  function registrarParceriaLocal(userId, itemParceria) {
+    const chaves = userId ? [`parceriasConfirmadas_${userId}`, 'parceriasConfirmadas'] : ['parceriasConfirmadas'];
 
-      const btn = document.getElementById('btn-confirmar-pontos');
+    chaves.forEach(chave => {
+      let lista = JSON.parse(localStorage.getItem(chave) || '[]');
+      if (!Array.isArray(lista)) lista = [];
 
-      if (tipo === 'cooperativa') {
-        btn.innerText = "🎉 Coleta Validada com Sucesso!";
-        btn.disabled = true;
-        confetti({ particleCount: 120, spread: 80, origin: { y: 0.6 } });
-        return;
+      const jaExiste = lista.some(p =>
+        (itemParceria.empId && String(p.empId) === String(itemParceria.empId)) ||
+        (itemParceria.nome && String(p.nome).trim().toLowerCase() === String(itemParceria.nome).trim().toLowerCase())
+      );
+
+      if (!jaExiste) {
+        lista.push(itemParceria);
+        localStorage.setItem(chave, JSON.stringify(lista));
       }
+    });
+  }
 
-      // Salva na chave isolada da conta logada (que o metricas.html lê)
-      const chavePontos = userId ? `pontosEmpresas_${userId}` : 'pontosEmpresas_anonimo';
-      let pontosSalvos = JSON.parse(localStorage.getItem(chavePontos) || '{}');
-      const pontosAtuais = parseInt(pontosSalvos[empresaId]) || 0;
+  function validarEntregaEPontuar() {
+    const { id, empId, nome, tipo, userId } = operacaoAtual;
+    const btn = document.getElementById('btn-confirmar-pontos');
 
-      pontosSalvos[empresaId] = pontosAtuais + 10;
-      localStorage.setItem(chavePontos, JSON.stringify(pontosSalvos));
+    // 1. Soma +10 pontos para o item na tabela de métricas
+    const chavePontos = userId ? `pontosEmpresas_${userId}` : 'pontosEmpresas_anonimo';
+    let pontosSalvos = JSON.parse(localStorage.getItem(chavePontos) || '{}');
+    const pontosAtuais = Number(pontosSalvos[id]) || 0;
+    pontosSalvos[id] = pontosAtuais + 10;
+    localStorage.setItem(chavePontos, JSON.stringify(pontosSalvos));
 
-      // Mantém compatibilidade com chave genérica
-      let pontosLegado = JSON.parse(localStorage.getItem('pontosEmpresas') || '{}');
-      pontosLegado[empresaId] = pontosSalvos[empresaId];
-      localStorage.setItem('pontosEmpresas', JSON.stringify(pontosLegado));
+    let pontosLegado = JSON.parse(localStorage.getItem('pontosEmpresas') || '{}');
+    pontosLegado[id] = pontosSalvos[id];
+    localStorage.setItem('pontosEmpresas', JSON.stringify(pontosLegado));
 
-      btn.innerText = `🎉 Entrega Confirmada (Total: +${pontosSalvos[empresaId]} Pts)`;
-      btn.disabled = true;
+    // 2. Registra a parceria confirmada para aparecer no Feed das Empresas
+    registrarParceriaLocal(userId, {
+      id: id,
+      empId: empId,
+      nome: nome,
+      tipo: tipo,
+      dataConfirmacao: new Date().toISOString()
+    });
 
-      confetti({ particleCount: 120, spread: 80, origin: { y: 0.6 } });
+    // 3. Notifica imediatamente as abas abertas (metricas.html e feed.html)
+    try {
+      const canal = new BroadcastChannel('circularis_sync');
+      canal.postMessage({
+        evento: 'ENTREGA_CONFIRMADA',
+        id,
+        empId,
+        nome,
+        tipo,
+        userId,
+        novosPontos: pontosSalvos[id]
+      });
+    } catch (_) {}
+
+    btn.innerText = tipo === 'cooperativa'
+      ? "🎉 Coleta Confirmada • Parceria Ativa no Feed!"
+      : `🎉 Entrega Confirmada (+10 Pts no Score • Parceria Ativa!)`;
+    btn.disabled = true;
+
+    confetti({ particleCount: 120, spread: 80, origin: { y: 0.6 } });
+  }
+
+  function voltarAoDashboard() {
+    const { id, empId, nome, tipo, userId } = operacaoAtual;
+    const params = new URLSearchParams({
+      confirmado_id: id,
+      empId: empId,
+      nome: nome,
+      type: tipo,
+      user: userId
+    });
+
+    if (window.location.hostname.includes('github.io')) {
+      window.location.href = `http://localhost:3000/metricas.html?${params.toString()}`;
+    } else {
+      window.location.href = `metricas.html?${params.toString()}`;
     }
+  }
 
-    function voltarAoDashboard() {
-      if (window.location.hostname.includes('github.io')) {
-        window.history.back();
-      } else {
-        window.location.href = "metricas.html";
-      }
-    }
-
-    window.onload = carregarDadosDaTabela;
-  </script>
+  window.onload = carregarDadosDaTabela;
+</script>
 </body>
 </html>
