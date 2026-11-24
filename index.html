@@ -135,12 +135,14 @@
     id: '',
     empId: '',
     nome: '',
+    produto: '',
     tipo: 'industria',
     userId: ''
   };
 
   let entregaConfirmada = false;
   let pontosGanhosSessao = 0;
+  let confirmacaoTs = '';
 
   async function carregarDadosDaTabela() {
     const urlParams = new URLSearchParams(window.location.search);
@@ -161,21 +163,25 @@
       return;
     }
 
+    const qtdUrl = parseFloat(urlParams.get('qtd') || '0');
+    const valorUrl = parseFloat(urlParams.get('orcamento') || urlParams.get('valor') || '0');
+    const precoUnitUrl = urlParams.get('precoUnit') || (qtdUrl > 0 && valorUrl > 0 ? (valorUrl / qtdUrl) : valorUrl);
+
     let dadosItem = {
       id: idParam,
       empId: empIdParam,
       nome: urlParams.get('nome') || '',
       produto: urlParams.get('produto') || '',
       categoria: urlParams.get('categoria') || '',
-      quantidade: urlParams.get('qtd') || '',
+      quantidade: qtdUrl || '',
       unidade: urlParams.get('unidade') || 'kg',
-      precoUnitario: urlParams.get('precoUnit') || '',
-      orcamentoTotal: urlParams.get('orcamento') || '',
+      precoUnitario: precoUnitUrl || '',
+      orcamentoTotal: valorUrl || '',
       distanciaKm: urlParams.get('dist') || '',
       localizacao: urlParams.get('local') || '',
       taxaFixa: urlParams.get('taxaFixa') || '',
-      tipoCobranca: urlParams.get('tipoCob') || '',
-      custoTotal: urlParams.get('custoTotal') || ''
+      tipoCobranca: urlParams.get('tipoCob') || urlParams.get('servico') || '',
+      custoTotal: urlParams.get('custoTotal') || urlParams.get('custo') || ''
     };
 
     try {
@@ -245,13 +251,14 @@
       id: String(idParam),
       empId: String(dadosItem.empId || (tipo === 'cooperativa' ? idParam : '')),
       nome: dadosItem.nome || 'Parceiro Circularis',
+      produto: dadosItem.produto || '',
       tipo: tipo,
       userId: String(userId)
     };
 
     if (tipo === 'cooperativa') {
       badge.innerText = "♻️ Coleta • Cooperativa";
-      btnConfirmar.innerText = "✅ Confirmar Coleta e Ativar Parceria";
+      btnConfirmar.innerText = "✅ Confirmar Coleta e Atribuir (+10 Pts)";
 
       container.innerHTML = `
         <p>♻️ <strong>Cooperativa:</strong> ${dadosItem.nome || 'Cooperativa Parceira'}</p>
@@ -301,14 +308,19 @@
   }
 
   function validarEntregaEPontuar() {
-    const { id, empId, nome, tipo, userId } = operacaoAtual;
+    if (entregaConfirmada) return;
+
+    const { id, empId, nome, produto, tipo, userId } = operacaoAtual;
     const btn = document.getElementById('btn-confirmar-pontos');
 
     entregaConfirmada = true;
-    pontosGanhosSessao += 10;
+    pontosGanhosSessao = 10;
+    confirmacaoTs = String(Date.now());
 
-    // 1. Salva no localStorage do domínio atual
+    // 1. Salva no localStorage do domínio atual e marca o token de confirmação
     const chavePontos = userId ? `pontosEmpresas_${userId}` : 'pontosEmpresas_anonimo';
+    const chaveProc = userId ? `confirmacoesProcessadas_${userId}` : 'confirmacoesProcessadas_anonimo';
+
     let pontosSalvos = JSON.parse(localStorage.getItem(chavePontos) || '{}');
     pontosSalvos[id] = (Number(pontosSalvos[id]) || 0) + 10;
     localStorage.setItem(chavePontos, JSON.stringify(pontosSalvos));
@@ -317,23 +329,32 @@
     pontosLegado[id] = pontosSalvos[id];
     localStorage.setItem('pontosEmpresas', JSON.stringify(pontosLegado));
 
+    let processadas = JSON.parse(localStorage.getItem(chaveProc) || '[]');
+    if (!processadas.includes(confirmacaoTs)) {
+      processadas.push(confirmacaoTs);
+      localStorage.setItem(chaveProc, JSON.stringify(processadas));
+    }
+
     registrarParceriaLocal(userId, {
       id: id,
       empId: empId,
       nome: nome,
+      produto: produto,
       tipo: tipo,
       dataConfirmacao: new Date().toISOString()
     });
 
-    // 2. Envia mensagem cross-origin caso tenha sido aberto a partir de localhost:3000
+    // 2. Sincroniza em tempo real se metricas.html estiver aberta em outra aba/janela
     const payloadSync = {
       evento: 'ENTREGA_CONFIRMADA',
       id,
       empId,
       nome,
+      produto,
       tipo,
       userId,
-      pontosAdd: 10
+      pontosAdd: 10,
+      ts: confirmacaoTs
     };
 
     try {
@@ -348,7 +369,7 @@
     } catch (_) {}
 
     btn.innerText = tipo === 'cooperativa'
-      ? "🎉 Coleta Confirmada! Clique em Voltar ao Dashboard"
+      ? `🎉 Coleta Confirmada (+${pontosGanhosSessao} Pts)! Clique em Voltar ao Dashboard`
       : `🎉 Confirmado (+${pontosGanhosSessao} Pts)! Clique em Voltar ao Dashboard`;
     btn.disabled = true;
 
@@ -356,18 +377,18 @@
   }
 
   function voltarAoDashboard() {
-    const { id, empId, nome, tipo, userId } = operacaoAtual;
+    const { id, empId, nome, produto, tipo, userId } = operacaoAtual;
     const params = new URLSearchParams();
 
-    // Só envia pontuação e parceria se o botão de confirmar foi realmente clicado
     if (entregaConfirmada) {
       params.set('confirmado_id', id);
       params.set('pontos_add', String(pontosGanhosSessao || 10));
       params.set('empId', empId);
       params.set('nome', nome);
+      params.set('produto', produto);
       params.set('type', tipo);
       params.set('user', userId);
-      params.set('ts', String(Date.now()));
+      params.set('ts', confirmacaoTs || String(Date.now()));
     }
 
     const query = params.toString() ? `?${params.toString()}` : '';
