@@ -109,7 +109,7 @@
 
     <div class="btn-actions">
       <button class="btn-success" id="btn-confirmar-pontos" onclick="validarEntregaEPontuar()">
-        ✅ Confirmar Entrega e Atribuir (+10 Pts)
+        ✅ Confirmar Entrega e Somar (+10 Pts)
       </button>
 
       <button class="btn-secondary" onclick="voltarAoDashboard()">
@@ -135,9 +135,12 @@
     id: '',
     empId: '',
     nome: '',
+    meuNome: '',
     produto: '',
+    servico: '',
     tipo: 'industria',
-    userId: ''
+    userId: '',
+    date: ''
   };
 
   let entregaConfirmada = false;
@@ -150,7 +153,8 @@
     const empIdParam = urlParams.get('empId') || '';
     const tipo = (urlParams.get('type') || 'industria').toLowerCase();
     const userId = urlParams.get('user') || localStorage.getItem('id_usu') || '';
-    const dataFormatada = formatarDataBR(urlParams.get('date'));
+    const rawDate = urlParams.get('date') || new Date().toISOString().split('T')[0];
+    const dataFormatada = formatarDataBR(rawDate);
 
     const container = document.getElementById('qr-product-info');
     const badge = document.getElementById('badge-operacao');
@@ -171,7 +175,9 @@
       id: idParam,
       empId: empIdParam,
       nome: urlParams.get('nome') || '',
+      meuNome: urlParams.get('meuNome') || '',
       produto: urlParams.get('produto') || '',
+      servico: urlParams.get('servico') || '',
       categoria: urlParams.get('categoria') || '',
       quantidade: qtdUrl || '',
       unidade: urlParams.get('unidade') || 'kg',
@@ -217,6 +223,7 @@
             dadosItem.localizacao = coopBanco.localizacao || dadosItem.localizacao;
             dadosItem.taxaFixa = taxaFixa;
             dadosItem.tipoCobranca = tipoTexto;
+            dadosItem.servico = coopBanco.servicos || dadosItem.servico || 'Coleta e Triagem';
             dadosItem.custoTotal = taxaFixa + custoVar;
           }
         }
@@ -251,17 +258,21 @@
       id: String(idParam),
       empId: String(dadosItem.empId || (tipo === 'cooperativa' ? idParam : '')),
       nome: dadosItem.nome || 'Parceiro Circularis',
+      meuNome: dadosItem.meuNome || '',
       produto: dadosItem.produto || '',
+      servico: dadosItem.servico || '',
       tipo: tipo,
-      userId: String(userId)
+      userId: String(userId),
+      date: rawDate
     };
 
     if (tipo === 'cooperativa') {
       badge.innerText = "♻️ Coleta • Cooperativa";
-      btnConfirmar.innerText = "✅ Confirmar Coleta e Atribuir (+10 Pts)";
+      btnConfirmar.innerText = "✅ Confirmar Coleta e Somar (+10 Pts)";
 
       container.innerHTML = `
         <p>♻️ <strong>Cooperativa:</strong> ${dadosItem.nome || 'Cooperativa Parceira'}</p>
+        ${dadosItem.meuNome ? `<p>🏭 <strong>Solicitante:</strong> ${dadosItem.meuNome}</p>` : ''}
         <p>📍 <strong>Localização:</strong> ${dadosItem.localizacao || 'Não informada'}</p>
         <p>🏷️ <strong>Taxa Fixa:</strong> ${formatarBRL(dadosItem.taxaFixa)}</p>
         <p>🧾 <strong>Tipo de Cobrança:</strong> ${dadosItem.tipoCobranca || 'Taxa por Serviço'}</p>
@@ -277,6 +288,7 @@
 
       container.innerHTML = `
         <p>🏢 <strong>Fornecedor:</strong> ${dadosItem.nome || 'Empresa Parceira'}</p>
+        ${dadosItem.meuNome ? `<p>🤝 <strong>Comprador:</strong> ${dadosItem.meuNome}</p>` : ''}
         <p>📦 <strong>Produto / Resíduo:</strong> ${dadosItem.produto || 'Resíduo Industrial'}</p>
         ${dadosItem.categoria ? `<p>🗂️ <strong>Categoria:</strong> ${dadosItem.categoria}</p>` : ''}
         <p>⚖️ <strong>Quantidade (Escala Base):</strong> ${qtdFormatada}</p>
@@ -288,19 +300,17 @@
     }
   }
 
-  function registrarParceriaLocal(userId, itemParceria) {
-    const chaves = userId ? [`parceriasConfirmadas_${userId}`, 'parceriasConfirmadas'] : ['parceriasConfirmadas'];
+  function registrarParceriaLocal(itemParceria) {
+    const chaves = ['parceriasFechadasQR', 'parceriasConfirmadas'];
+    if (itemParceria.userId) {
+      chaves.push(`parceriasConfirmadas_${itemParceria.userId}`);
+    }
 
     chaves.forEach(chave => {
       let lista = JSON.parse(localStorage.getItem(chave) || '[]');
       if (!Array.isArray(lista)) lista = [];
 
-      const jaExiste = lista.some(p =>
-        (itemParceria.empId && String(p.empId) === String(itemParceria.empId)) ||
-        (itemParceria.nome && String(p.nome).trim().toLowerCase() === String(itemParceria.nome).trim().toLowerCase())
-      );
-
-      if (!jaExiste) {
+      if (!lista.some(p => p.ts && String(p.ts) === String(itemParceria.ts))) {
         lista.push(itemParceria);
         localStorage.setItem(chave, JSON.stringify(lista));
       }
@@ -310,14 +320,14 @@
   function validarEntregaEPontuar() {
     if (entregaConfirmada) return;
 
-    const { id, empId, nome, produto, tipo, userId } = operacaoAtual;
+    const { id, empId, nome, meuNome, produto, servico, tipo, userId, date } = operacaoAtual;
     const btn = document.getElementById('btn-confirmar-pontos');
 
     entregaConfirmada = true;
     pontosGanhosSessao = 10;
-    confirmacaoTs = String(Date.now());
+    confirmacaoTs = `${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
 
-    // 1. Salva no localStorage do domínio atual e marca o token de confirmação
+    // 1. Soma +10 pontos no localStorage do domínio atual
     const chavePontos = userId ? `pontosEmpresas_${userId}` : 'pontosEmpresas_anonimo';
     const chaveProc = userId ? `confirmacoesProcessadas_${userId}` : 'confirmacoesProcessadas_anonimo';
 
@@ -326,7 +336,7 @@
     localStorage.setItem(chavePontos, JSON.stringify(pontosSalvos));
 
     let pontosLegado = JSON.parse(localStorage.getItem('pontosEmpresas') || '{}');
-    pontosLegado[id] = pontosSalvos[id];
+    pontosLegado[id] = (Number(pontosLegado[id]) || 0) + 10;
     localStorage.setItem('pontosEmpresas', JSON.stringify(pontosLegado));
 
     let processadas = JSON.parse(localStorage.getItem(chaveProc) || '[]');
@@ -335,26 +345,28 @@
       localStorage.setItem(chaveProc, JSON.stringify(processadas));
     }
 
-    registrarParceriaLocal(userId, {
+    const registroParceria = {
+      ts: confirmacaoTs,
       id: id,
       empId: empId,
       nome: nome,
+      solicitanteId: userId,
+      solicitanteNome: meuNome || 'Empresa Parceira',
       produto: produto,
+      servico: servico,
       tipo: tipo,
+      dataAgendada: date,
       dataConfirmacao: new Date().toISOString()
-    });
+    };
 
-    // 2. Sincroniza em tempo real se metricas.html estiver aberta em outra aba/janela
+    registrarParceriaLocal(registroParceria);
+
+    // 2. Sincroniza em tempo real se metricas.html ou feed.html estiverem abertos
     const payloadSync = {
       evento: 'ENTREGA_CONFIRMADA',
-      id,
-      empId,
-      nome,
-      produto,
-      tipo,
+      ...registroParceria,
       userId,
-      pontosAdd: 10,
-      ts: confirmacaoTs
+      pontosAdd: 10
     };
 
     try {
@@ -369,15 +381,15 @@
     } catch (_) {}
 
     btn.innerText = tipo === 'cooperativa'
-      ? `🎉 Coleta Confirmada (+${pontosGanhosSessao} Pts)! Clique em Voltar ao Dashboard`
-      : `🎉 Confirmado (+${pontosGanhosSessao} Pts)! Clique em Voltar ao Dashboard`;
+      ? `🎉 Coleta Confirmada (+${pontosGanhosSessao} Pts)! Clique em Voltar`
+      : `🎉 Entrega Confirmada (+${pontosGanhosSessao} Pts)! Clique em Voltar`;
     btn.disabled = true;
 
     confetti({ particleCount: 120, spread: 80, origin: { y: 0.6 } });
   }
 
   function voltarAoDashboard() {
-    const { id, empId, nome, produto, tipo, userId } = operacaoAtual;
+    const { id, empId, nome, meuNome, produto, servico, tipo, userId, date } = operacaoAtual;
     const params = new URLSearchParams();
 
     if (entregaConfirmada) {
@@ -385,10 +397,13 @@
       params.set('pontos_add', String(pontosGanhosSessao || 10));
       params.set('empId', empId);
       params.set('nome', nome);
+      params.set('meuNome', meuNome);
       params.set('produto', produto);
+      params.set('servico', servico);
       params.set('type', tipo);
       params.set('user', userId);
-      params.set('ts', confirmacaoTs || String(Date.now()));
+      params.set('date', date);
+      params.set('ts', confirmacaoTs || `${Date.now()}`);
     }
 
     const query = params.toString() ? `?${params.toString()}` : '';
