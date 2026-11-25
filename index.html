@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Circularis • Detalhes & Validação do QR Code</title>
+  <title>Circularis • Detalhes da Carga</title>
   <style>
     * { box-sizing: border-box; font-family: 'Segoe UI', system-ui, sans-serif; }
     body {
@@ -40,46 +40,47 @@
     }
     .linha {
       border-bottom: 1px dashed rgba(22, 163, 74, 0.25);
-      padding: 4px 0;
+      padding: 5px 0;
     }
     .linha:last-child { border-bottom: none; }
-    .btn-confirmar {
+    .btn-acao {
       width: 100%;
-      background: #2e7d32;
+      background: #0f4033;
       color: #ffffff;
       border: none;
-      padding: 14px 18px;
+      padding: 13px 18px;
       border-radius: 10px;
-      font-size: 1rem;
-      font-weight: 800;
-      cursor: pointer;
-    }
-    .btn-confirmar:hover { background: #1b5e20; }
-    .msg-ok {
-      display: none;
-      margin-top: 16px;
-      background: #dcfce7;
-      color: #14532d;
-      padding: 12px;
-      border-radius: 8px;
+      font-size: 0.95rem;
       font-weight: 700;
-      font-size: 0.88rem;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .btn-acao:hover { background: #071f18; }
+    .status-box {
+      display: none;
+      margin-top: 14px;
+      background: #e0f2fe;
+      color: #0369a1;
+      padding: 10px 12px;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      font-weight: 700;
     }
   </style>
 </head>
 <body>
   <div class="card">
-    <h2>📦 Validação da Carga</h2>
-    <p class="sub">Confira os dados do produto/serviço e confirme a leitura.</p>
+    <h2>📦 Detalhes da Carga</h2>
+    <p class="sub">Informações da operação vinculada ao QR Code.</p>
 
     <div class="box-info" id="info-carga">Carregando informações...</div>
 
-    <button class="btn-confirmar" id="btnConfirmarQR" onclick="confirmarLeituraQRCode()">
-      ✅ Confirmar Leitura do QR Code (+10 pts)
+    <button class="btn-acao" id="btnConcluirVisualizacao" onclick="concluirConsulta()">
+      🔍 Registrar Conferência da Carga
     </button>
 
-    <div class="msg-ok" id="msgOk">
-      🎉 Leitura confirmada! +10 pontos somados ao score.
+    <div class="status-box" id="statusBox">
+      ✔️ Carga conferida no dispositivo. Confirme os +10 pts na tela do sistema.
     </div>
   </div>
 
@@ -104,75 +105,26 @@
 
     const qtdExibida = qtd ? `${qtd}` : '-';
     const distExibida = dist ? `${dist} km` : '-';
+    const itemIcone = tipoOp === 'cooperativa' ? '♻️' : '📦';
     const itemLabel = tipoOp === 'cooperativa' ? 'Serviço' : 'Produto';
     const itemValor = tipoOp === 'cooperativa' ? (servico || 'Coleta e Triagem') : (produto || 'Resíduo Industrial');
 
     document.getElementById('info-carga').innerHTML = `
-      <div class="linha"><strong>Parceiro:</strong> ${nomeParceiro}</div>
-      <div class="linha"><strong>Solicitante:</strong> ${meuNome}</div>
-      <div class="linha"><strong>${itemLabel}:</strong> ${itemValor}</div>
-      ${tipoOp !== 'cooperativa' ? `<div class="linha"><strong>Quantidade:</strong> ${qtdExibida}</div>` : ''}
-      <div class="linha"><strong>${tipoOp === 'cooperativa' ? 'Custo Estimado' : 'Orçamento'}:</strong> ${valorExibido}</div>
-      <div class="linha"><strong>Distância:</strong> ${distExibida}</div>
-      <div class="linha"><strong>Data:</strong> ${dataAlvo}</div>
-      <div class="linha"><strong>ID da Operação:</strong> ${idOp}</div>
+      <div class="linha">🏢 <strong>Parceiro:</strong> ${nomeParceiro}</div>
+      <div class="linha">👤 <strong>Solicitante:</strong> ${meuNome}</div>
+      <div class="linha">${itemIcone} <strong>${itemLabel}:</strong> ${itemValor}</div>
+      ${tipoOp !== 'cooperativa' ? `<div class="linha">⚖️ <strong>Quantidade:</strong> ${qtdExibida}</div>` : ''}
+      <div class="linha">💰 <strong>${tipoOp === 'cooperativa' ? 'Custo Estimado' : 'Orçamento'}:</strong> ${valorExibido}</div>
+      <div class="linha">📍 <strong>Distância:</strong> ${distExibida}</div>
+      <div class="linha">📅 <strong>Data:</strong> ${dataAlvo}</div>
+      <div class="linha">🔢 <strong>ID da Operação:</strong> ${idOp}</div>
     `;
 
-    function confirmarLeituraQRCode() {
-      const btn = document.getElementById('btnConfirmarQR');
-      btn.disabled = true;
-      btn.innerText = 'Confirmando...';
-
-      const payload = {
-        evento: 'ENTREGA_CONFIRMADA',
-        id: idOp,
-        empId: params.get('empId') || '',
-        nome: params.get('nome') || '',
-        meuNome: params.get('meuNome') || '',
-        produto: params.get('produto') || '',
-        servico: params.get('servico') || '',
-        tipo: tipoOp,
-        userId: params.get('user') || '',
-        date: dataAlvo,
-        pontosAdd: 10,
-        ts: String(Date.now())
-      };
-
-      try {
-        if (window.opener && !window.opener.closed) {
-          window.opener.postMessage(payload, '*');
-        }
-      } catch (_) {}
-
-      try {
-        const bc = new BroadcastChannel('circularis_sync');
-        bc.postMessage(payload);
-      } catch (_) {}
-
-      document.getElementById('msgOk').style.display = 'block';
-
-      const returnUrl = params.get('return_url');
-      if (returnUrl) {
-        const volta = new URLSearchParams({
-          confirmado_id: payload.id,
-          empId: payload.empId,
-          nome: payload.nome,
-          meuNome: payload.meuNome,
-          produto: payload.produto,
-          servico: payload.servico,
-          type: payload.tipo,
-          user: payload.userId,
-          date: payload.date,
-          pontos_add: '10',
-          ts: payload.ts
-        });
-
-        setTimeout(() => {
-          window.location.href = `${returnUrl}?${volta.toString()}`;
-        }, 700);
-      } else {
-        btn.innerText = '✅ Confirmado (+10 pts)';
-      }
+    function concluirConsulta() {
+      document.getElementById('statusBox').style.display = 'block';
+      const btn = document.getElementById('btnConcluirVisualizacao');
+      btn.innerText = '✔️ Conferência Registrada';
+      btn.style.background = '#15803d';
     }
   </script>
 </body>
