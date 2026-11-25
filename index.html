@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Circularis • Validação do QR Code</title>
+  <title>Circularis • Detalhes & Validação do QR Code</title>
   <style>
     * { box-sizing: border-box; font-family: 'Segoe UI', system-ui, sans-serif; }
     body {
@@ -20,24 +20,29 @@
       background: #ffffff;
       border-radius: 16px;
       padding: 26px;
-      max-width: 420px;
+      max-width: 440px;
       width: 100%;
       box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
       text-align: center;
     }
-    h2 { margin: 0 0 8px 0; font-size: 1.35rem; color: #071f18; }
+    h2 { margin: 0 0 6px 0; font-size: 1.35rem; color: #071f18; }
     .sub { font-size: 0.88rem; color: #475569; margin-bottom: 18px; }
     .box-info {
       background: #f0fdf4;
       border: 1px solid #bbf7d0;
       border-left: 5px solid #16a34a;
       border-radius: 10px;
-      padding: 14px;
+      padding: 16px;
       text-align: left;
       font-size: 0.9rem;
-      line-height: 1.6;
+      line-height: 1.7;
       margin-bottom: 20px;
     }
+    .linha {
+      border-bottom: 1px dashed rgba(22, 163, 74, 0.25);
+      padding: 4px 0;
+    }
+    .linha:last-child { border-bottom: none; }
     .btn-confirmar {
       width: 100%;
       background: #2e7d32;
@@ -64,31 +69,53 @@
 </head>
 <body>
   <div class="card">
-    <h2>📱 Validação de Carga</h2>
-    <p class="sub">Confirme a leitura do QR Code para somar <strong>+10 pts</strong> no score atual.</p>
+    <h2>📦 Validação da Carga</h2>
+    <p class="sub">Confira os dados do produto/serviço e confirme a leitura.</p>
 
-    <div class="box-info" id="info-carga">Carregando dados da operação...</div>
+    <div class="box-info" id="info-carga">Carregando informações...</div>
 
     <button class="btn-confirmar" id="btnConfirmarQR" onclick="confirmarLeituraQRCode()">
       ✅ Confirmar Leitura do QR Code (+10 pts)
     </button>
 
     <div class="msg-ok" id="msgOk">
-      🎉 Leitura confirmada! +10 pontos enviados para o Score.
+      🎉 Leitura confirmada! +10 pontos somados ao score.
     </div>
   </div>
 
   <script>
     const params = new URLSearchParams(window.location.search);
 
-    const nomeAlvo = params.get('nome') || 'Parceiro Circularis';
-    const itemAlvo = params.get('produto') || params.get('servico') || 'Operação Circular';
+    const idOp = params.get('id') || '-';
+    const tipoOp = (params.get('type') || 'industria').toLowerCase();
+    const nomeParceiro = params.get('nome') || 'Parceiro Circularis';
+    const meuNome = params.get('meuNome') || '-';
+    const produto = params.get('produto') || '';
+    const servico = params.get('servico') || '';
+    const qtd = params.get('qtd');
+    const valor = params.get('valor');
+    const custo = params.get('custo');
+    const dist = params.get('dist');
     const dataAlvo = params.get('date') || new Date().toISOString().split('T')[0];
 
+    const valorExibido = tipoOp === 'cooperativa'
+      ? (custo ? `R$ ${Number(custo).toFixed(2)}` : '-')
+      : (valor ? `R$ ${Number(valor).toFixed(2)}` : '-');
+
+    const qtdExibida = qtd ? `${qtd}` : '-';
+    const distExibida = dist ? `${dist} km` : '-';
+    const itemLabel = tipoOp === 'cooperativa' ? 'Serviço' : 'Produto';
+    const itemValor = tipoOp === 'cooperativa' ? (servico || 'Coleta e Triagem') : (produto || 'Resíduo Industrial');
+
     document.getElementById('info-carga').innerHTML = `
-      <strong>Parceiro:</strong> ${nomeAlvo}<br>
-      <strong>Produto / Serviço:</strong> ${itemAlvo}<br>
-      <strong>Data:</strong> ${dataAlvo}
+      <div class="linha"><strong>Parceiro:</strong> ${nomeParceiro}</div>
+      <div class="linha"><strong>Solicitante:</strong> ${meuNome}</div>
+      <div class="linha"><strong>${itemLabel}:</strong> ${itemValor}</div>
+      ${tipoOp !== 'cooperativa' ? `<div class="linha"><strong>Quantidade:</strong> ${qtdExibida}</div>` : ''}
+      <div class="linha"><strong>${tipoOp === 'cooperativa' ? 'Custo Estimado' : 'Orçamento'}:</strong> ${valorExibido}</div>
+      <div class="linha"><strong>Distância:</strong> ${distExibida}</div>
+      <div class="linha"><strong>Data:</strong> ${dataAlvo}</div>
+      <div class="linha"><strong>ID da Operação:</strong> ${idOp}</div>
     `;
 
     function confirmarLeituraQRCode() {
@@ -98,20 +125,19 @@
 
       const payload = {
         evento: 'ENTREGA_CONFIRMADA',
-        id: params.get('id') || '',
+        id: idOp,
         empId: params.get('empId') || '',
         nome: params.get('nome') || '',
         meuNome: params.get('meuNome') || '',
         produto: params.get('produto') || '',
         servico: params.get('servico') || '',
-        tipo: params.get('type') || 'industria',
+        tipo: tipoOp,
         userId: params.get('user') || '',
         date: dataAlvo,
         pontosAdd: 10,
         ts: String(Date.now())
       };
 
-      // Se abriu no mesmo navegador/aba via window.opener ou BroadcastChannel
       try {
         if (window.opener && !window.opener.closed) {
           window.opener.postMessage(payload, '*');
