@@ -87,7 +87,6 @@
   <script>
     const params = new URLSearchParams(window.location.search);
 
-    const idOp = params.get('id') || '-';
     const tipoOp = (params.get('type') || 'industria').toLowerCase();
     const nomeParceiro = params.get('nome') || 'Parceiro Circularis';
     const meuNome = params.get('meuNome') || '-';
@@ -97,17 +96,37 @@
     const valor = params.get('valor');
     const custo = params.get('custo');
     const dist = params.get('dist');
+    const avaliacaoRaw = params.get('avaliacao');
     const dataAlvo = params.get('date') || new Date().toISOString().split('T')[0];
 
+    function formatarMoeda(v) {
+      const num = Number(v);
+      if (v === null || v === undefined || v === '' || Number.isNaN(num)) return '-';
+      return num.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    }
+
+    function formatarDataBR(dataStr) {
+      if (!dataStr) return '-';
+      const partes = String(dataStr).split('-');
+      if (partes.length === 3) return `${partes[2]}/${partes[1]}/${partes[0]}`;
+      return dataStr;
+    }
+
     const valorExibido = tipoOp === 'cooperativa'
-      ? (custo ? `R$ ${Number(custo).toFixed(2)}` : '-')
-      : (valor ? `R$ ${Number(valor).toFixed(2)}` : '-');
+      ? formatarMoeda(custo)
+      : formatarMoeda(valor);
 
     const qtdExibida = qtd ? `${qtd}` : '-';
     const distExibida = dist ? `${dist} km` : '-';
+    const avaliacaoExibida = (avaliacaoRaw !== null && avaliacaoRaw !== '' && !Number.isNaN(Number(avaliacaoRaw)))
+      ? `${Number(avaliacaoRaw).toFixed(1)}`
+      : '-';
+
     const itemIcone = tipoOp === 'cooperativa' ? '♻️' : '📦';
     const itemLabel = tipoOp === 'cooperativa' ? 'Serviço' : 'Produto';
-    const itemValor = tipoOp === 'cooperativa' ? (servico || 'Coleta e Triagem') : (produto || 'Resíduo Industrial');
+    const itemValor = tipoOp === 'cooperativa'
+      ? (servico || 'Coleta e Triagem')
+      : (produto || 'Resíduo Industrial');
 
     document.getElementById('info-carga').innerHTML = `
       <div class="linha">🏢 <strong>Parceiro:</strong> ${nomeParceiro}</div>
@@ -116,8 +135,8 @@
       ${tipoOp !== 'cooperativa' ? `<div class="linha">⚖️ <strong>Quantidade:</strong> ${qtdExibida}</div>` : ''}
       <div class="linha">💰 <strong>${tipoOp === 'cooperativa' ? 'Custo Estimado' : 'Orçamento'}:</strong> ${valorExibido}</div>
       <div class="linha">📍 <strong>Distância:</strong> ${distExibida}</div>
-      <div class="linha">📅 <strong>Data:</strong> ${dataAlvo}</div>
-      <div class="linha">🔢 <strong>ID da Operação:</strong> ${idOp}</div>
+      <div class="linha">📅 <strong>Data:</strong> ${formatarDataBR(dataAlvo)}</div>
+      <div class="linha">⭐ <strong>Avaliação:</strong> ${avaliacaoExibida}</div>
     `;
 
     function concluirConsulta() {
